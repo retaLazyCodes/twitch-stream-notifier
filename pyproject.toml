@@ -1,0 +1,25 @@
+[tool.poetry]
+name = "twitch-notifier"
+version = "0.1.0"
+description = ""
+authors = ["Retamar Brian <leo1632@hotmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.8"
+
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.12.9"
+
+[tool.ruff]
+line-length = 79
+
+[tool.ruff.lint]
+# Add the `line-too-long` rule to the enforced rule set. By default, Ruff omits rules that
+# overlap with the use of a formatter, like Black, but we can override this behavior by
+# explicitly adding the rule.
+extend-select = ["E501"]
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
