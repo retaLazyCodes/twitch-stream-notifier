@@ -1,9 +1,10 @@
 import os
-import time
+import platform
 from dotenv import load_dotenv
-import requests
-import schedule
-from notifypy import Notify
+
+from .twitch_client import TwitchClient
+from .notifications import Notifier
+from .scheduler import TaskScheduler
 
 # loads environment variables
 load_dotenv()
@@ -11,98 +12,56 @@ load_dotenv()
 CLIENT_ID = os.getenv("CLIENT_ID")
 ACCESS_TOKEN = os.getenv("ACCESS_TOKEN")
 CHANNEL_TO_CHECK = os.getenv("CHANNEL_TO_CHECK")
+INTERVAL_MINUTES = int(os.getenv("INTERVAL_MINUTES", default=5))
 
 SCRIPT_DIR = os.path.dirname(__file__)
-ICON_PATH = os.path.join(SCRIPT_DIR, "..", "assets", "twitch.png")
+ASSETS_DIR = os.path.join(SCRIPT_DIR, "..", "assets")
+ICON_EXTENSION = "png" if platform.system() != "Windows" else "ico"
 
-# Variables to save the previous state of the channel
+ICON_PATH = os.path.join(ASSETS_DIR, f"twitch.{ICON_EXTENSION}") 
+SOUND_PATH = os.path.join(ASSETS_DIR, "alert.wav")
+
+twitch_client = TwitchClient(CLIENT_ID, ACCESS_TOKEN)
+notifier = Notifier(ICON_PATH, SOUND_PATH)
+
+# save the previous state of the channel
 is_live_last_check = None
-channel_user_id = None
+channel_user_id = twitch_client.get_user_id(CHANNEL_TO_CHECK)
 
 
-def get_user_id(username):
-    """Obtiene el ID de usuario a partir del nombre de usuario."""
-    try:
-        headers = {
-            "Authorization": f"Bearer {ACCESS_TOKEN}",
-            "Client-Id": CLIENT_ID,
-        }
-        url = f"https://api.twitch.tv/helix/users?login={username}"
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
-        data = response.json().get("data")
-        if data:
-            return data[0]["id"]
-        return None
-    except requests.exceptions.RequestException as e:
-        print(f"Error al obtener el ID de usuario: {e}")
-        return None
-
-
-def check_channel_status():
-    """
-    Verifica si el canal está en vivo y notifica si cambia de estado.
-    """
+def check_channel_and_notify():
+    """Función que se ejecutará en el programador de tareas."""
     global is_live_last_check
-    global channel_user_id
 
-    # Si aún no tenemos el ID del usuario, lo obtenemos
     if not channel_user_id:
-        channel_user_id = get_user_id(CHANNEL_TO_CHECK)
-        if not channel_user_id:
-            print(
-                f"No se pudo encontrar el ID para el usuario {CHANNEL_TO_CHECK}."
-                "Reintentando en 1 minuto..."
-            )
-            return
+        print("Error: No se pudo obtener el ID del canal. Deteniendo...")
+        return
 
-    try:
-        headers = {
-            "Authorization": f"Bearer {ACCESS_TOKEN}",
-            "Client-Id": CLIENT_ID,
-        }
-        url = f"https://api.twitch.tv/helix/streams?user_id={channel_user_id}"
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
+    is_live_now = twitch_client.is_channel_live(channel_user_id)
 
-        data = response.json().get("data")
-        is_live_now = bool(data)
+    if is_live_now and not is_live_last_check:
+        print(f"¡{CHANNEL_TO_CHECK} acaba de empezar a transmitir!")
+        notifier.notify_live(CHANNEL_TO_CHECK)
 
-        if is_live_now and not is_live_last_check:
-            print(f"¡{CHANNEL_TO_CHECK} acaba de empezar a transmitir!")
-            
-            notification = Notify()
-            notification.title = "Twitch"
-            notification.message = f"{CHANNEL_TO_CHECK} está en vivo!"
-            notification.application_name = "Twitch Stream Notifier"
-            notification.icon = ICON_PATH
-            notification.send()
+    elif not is_live_now and is_live_last_check:
+        print(f"{CHANNEL_TO_CHECK} ya no está en vivo.")
 
-        elif not is_live_now and is_live_last_check:
-            print(f"{CHANNEL_TO_CHECK} ya no está en vivo.")
+    elif is_live_now:
+        print(f"{CHANNEL_TO_CHECK} sigue en vivo.")
 
-        elif is_live_now:
-            print(f"{CHANNEL_TO_CHECK} sigue en vivo.")
+    else:
+        print(f"{CHANNEL_TO_CHECK} sigue offline.")
 
-        else:
-            print(f"{CHANNEL_TO_CHECK} sigue offline.")
-
-        is_live_last_check = is_live_now
-
-    except requests.exceptions.RequestException as e:
-        print(f"Error de conexión: {e}")
+    is_live_last_check = is_live_now
 
 
 def main():
-    """Configura y ejecuta la tarea de monitoreo."""
-    print("Iniciando el notificador de Twitch...")
-
-    # Programa la tarea para que se ejecute cada 1 minuto
-    schedule.every(1).minute.do(check_channel_status)
-
-    while True:
-        schedule.run_pending()
-        time.sleep(1)
+    """Punto de entrada de la aplicación."""
+    print("Iniciando notificador...")
+    scheduler = TaskScheduler(interval_minutes=INTERVAL_MINUTES)
+    scheduler.schedule_task(check_channel_and_notify)
+    print("Monitoreo iniciado. Presiona Ctrl+C para salir.")
+    scheduler.run_pending_tasks()
 
 
 if __name__ == "__main__":
