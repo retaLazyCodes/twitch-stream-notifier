@@ -1,0 +1,8 @@
+<!DOCTYPE RCC>
+<RCC version="1.0">
+    <qresource prefix="/assets">
+        <file>../assets/twitch.png</file>
+        <file>../assets/alert.wav</file>
+        <file>../assets/twitch.ico</file>
+    </qresource>
+</RCC>

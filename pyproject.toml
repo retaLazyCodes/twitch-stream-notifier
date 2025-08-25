@@ -11,9 +11,12 @@ requests = "^2.32.4"
 schedule = "^1.2.2"
 python-dotenv = "^1.1.1"
 notify_py = "^0.3.43"
+PyQt6 = "^6.6.0"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.12.9"
+pytest = "^7.4.0"
+pytest-qt = "^4.2.0"
 
 [tool.ruff]
 line-length = 82
